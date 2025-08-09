@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8" />
+    <title>Detalles Mascota - {{ mascota.nombre }}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
+</head>
+<body class="container py-4">
+    <h2>Detalles de la mascota: {{ mascota.nombre }}</h2>
+
+    <p><strong>Dueño:</strong> {{ mascota.nombre_dueño }}</p>
+    <p><strong>Teléfono:</strong> {{ mascota.telefono }}</p>
+    <p><strong>Raza:</strong> {{ mascota.raza or 'No especificada' }}</p>
+    <p><strong>Descripción:</strong> {{ mascota.descripcion or 'Sin descripción' }}</p>
+
+    {% if mascota.foto %}
+        <img src="{{ url_for('static', filename='uploads/' + mascota.foto) }}" alt="Foto de {{ mascota.nombre }}" style="max-width:200px; border-radius:5px;" />
+    {% else %}
+        <p>No hay foto disponible.</p>
+    {% endif %}
+
+    <button id="btnEnviarUbicacion" class="btn btn-success">Enviar mi ubicación al dueño por WhatsApp</button>
+
+    <p class="mt-3">
+      <a href="{{ url_for('index') }}">Volver al inicio</a>
+    </p>
+
+<script>
+document.getElementById('btnEnviarUbicacion').addEventListener('click', function() {
+    if (!navigator.geolocation) {
+        alert('Geolocalización no soportada por este navegador.');
+        return;
+    }
+
+    this.disabled = true;
+    this.textContent = 'Obteniendo ubicación...';
+
+    navigator.geolocation.getCurrentPosition(function(position) {
+        const lat = position.coords.latitude;
+        const lon = position.coords.longitude;
+
+        // Número de teléfono en formato internacional sin signos, ej: 5491122334455
+        const telefono = '{{ mascota.telefono }}'.replace(/\D/g, '');
+
+        const mensaje = encodeURIComponent(`Hola {{ mascota.nombre_dueño }}, encontré a tu mascota "{{ mascota.nombre }}". Mi ubicación es: https://www.google.com/maps?q=${lat},${lon}`);
+
+        // Link para WhatsApp web / app
+        const urlWhatsapp = `https://wa.me/${telefono}?text=${mensaje}`;
+
+        window.open(urlWhatsapp, '_blank');
+
+        // Reset botón
+        const btn = document.getElementById('btnEnviarUbicacion');
+        btn.disabled = false;
+        btn.textContent = 'Enviar mi ubicación al dueño por WhatsApp';
+
+    }, function(error) {
+        alert('No se pudo obtener la ubicación. Por favor habilita el GPS y vuelve a intentar.');
+        const btn = document.getElementById('btnEnviarUbicacion');
+        btn.disabled = false;
+        btn.textContent = 'Enviar mi ubicación al dueño por WhatsApp';
+    });
+});
+</script>
+
+</body>
+</html>
