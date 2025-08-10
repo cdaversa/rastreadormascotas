@@ -3,6 +3,8 @@ import random
 import string
 import io
 import sqlite3
+import zipfile
+from flask import send_file
 from flask import Flask, render_template, request, redirect, url_for, session, flash, send_file
 from werkzeug.security import generate_password_hash, check_password_hash
 import qrcode
@@ -39,7 +41,8 @@ def crear_tablas():
         apellido TEXT NOT NULL,
         email TEXT UNIQUE NOT NULL,
         telefono TEXT UNIQUE NOT NULL,
-        password_hash TEXT NOT NULL
+        password_hash TEXT NOT NULL,
+        admin INTEGER NOT NULL DEFAULT 0
     );
 
     CREATE TABLE IF NOT EXISTS qr_codes (
@@ -63,7 +66,6 @@ def crear_tablas():
     conn.commit()
     conn.close()
 
-crear_tablas()
 
 def generar_codigo_qr_unico():
     conn = get_db()
@@ -145,6 +147,7 @@ def login():
         if user and check_password_hash(user['password_hash'], password):
             session['user_id'] = user['id']
             session['user_nombre'] = user['nombre']
+            session['is_admin'] = bool(user['admin'])  # <-- nueva línea
             flash(f'Bienvenido {user["nombre"]}', 'success')
             return redirect(url_for('panel_usuario'))
         else:
@@ -243,6 +246,13 @@ def descargar_qr(codigo):
 
 @app.route('/admin', methods=['GET','POST'])
 def admin():
+    if 'user_id' not in session or not session.get('is_admin', False):
+        flash('Acceso denegado. Solo administradores.', 'danger')
+        return redirect(url_for('login'))
+
+    conn = get_db()
+    # resto igual...
+
     conn = get_db()
 
     if request.method == 'POST':
@@ -257,32 +267,66 @@ def admin():
         for _ in range(cantidad):
             codigo = generar_codigo_qr_unico()
             conn.execute('INSERT INTO qr_codes (codigo) VALUES (?)', (codigo,))
-            # Generar la imagen con el texto debajo y guardarla en QR_FOLDER
             try:
                 img_qr = generar_qr_con_codigo_texto(codigo)
                 img_qr.save(os.path.join(QR_FOLDER, f'qr_{codigo}.png'))
             except Exception as e:
-                # si falla la generación de imagen, no abortamos el proceso de guardado en DB
                 print("Error generando imagen QR:", e)
             nuevos_codigos.append(codigo)
 
         conn.commit()
         conn.close()
 
-        # Guardamos los códigos generados en session (temporal) y redirigimos (PRG)
         session['nuevos_codigos'] = nuevos_codigos
         flash(f'Se generaron {len(nuevos_codigos)} códigos QR.', 'success')
+
         return redirect(url_for('admin'))
 
-    # GET: mostramos la página admin con los códigos existentes + (si existen) los recien generados
-    # Sacamos los nuevos códigos de session (solo una vez)
-    nuevos = session.pop('nuevos_codigos', None)
-
-    # Consultar últimos 200 códigos generados (podés ajustar límite)
-    codigos = conn.execute('SELECT id, codigo, asignado FROM qr_codes ORDER BY id DESC LIMIT 200').fetchall()
+    # GET:
+    nuevos = session.get('nuevos_codigos', None)  # Cambiado de pop a get
+    codigos = conn.execute('SELECT id, codigo, asignado FROM qr_codes ORDER BY id DESC LIMIT 400').fetchall()
     conn.close()
 
     return render_template('admin.html', nuevos_codigos=nuevos, codigos=codigos)
+
+@app.route('/descargar_zip')
+def descargar_zip():
+    nuevos_codigos = session.get('nuevos_codigos')
+    if not nuevos_codigos:
+        flash('No hay códigos nuevos para descargar.', 'info')
+        return redirect(url_for('admin'))
+
+    memory_file = io.BytesIO()
+    with zipfile.ZipFile(memory_file, 'w') as zf:
+        for codigo in nuevos_codigos:
+            filepath = os.path.join(QR_FOLDER, f'qr_{codigo}.png')
+            if os.path.exists(filepath):
+                zf.write(filepath, arcname=f'qr_{codigo}.png')
+    memory_file.seek(0)
+
+    # Limpio la sesión solo después de preparar el zip
+    session.pop('nuevos_codigos', None)
+
+    return send_file(
+        memory_file,
+        mimetype='application/zip',
+        as_attachment=True,
+        download_name='nuevos_qr.zip'
+    )
+
+@app.route('/descargar_db')
+def descargar_db():
+    if 'user_id' not in session:
+        flash('Debe iniciar sesión.', 'danger')
+        return redirect(url_for('login'))
+    db_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), DB)
+    if not os.path.exists(db_path):
+        flash('Archivo de base de datos no encontrado.', 'danger')
+        return redirect(url_for('admin'))
+    return send_file(db_path, as_attachment=True, download_name='mascotas.db')
+
+# Llamar a crear_tablas justo aquí, antes de arrancar la app
+crear_tablas()
 
 if __name__ == '__main__':
     app.run(debug=True)

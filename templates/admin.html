@@ -17,6 +17,11 @@
     </div>
 </form>
 
+<!-- Botón para descargar la base de datos -->
+<div class="mb-4">
+  <a href="{{ url_for('descargar_db') }}" class="btn btn-warning">Descargar Base de Datos (mascotas.db)</a>
+</div>
+
 {% if nuevos_codigos %}
   <div class="mb-4">
     <h5>Códigos generados recientemente:</h5>
@@ -62,4 +67,12 @@
     {% endfor %}
   </tbody>
 </table>
+
+{% if nuevos_codigos %}
+<script>
+    window.onload = function() {
+        window.location.href = "{{ url_for('descargar_zip') }}";
+    }
+</script>
+{% endif %}
 {% endblock %}
