@@ -243,28 +243,46 @@ def descargar_qr(codigo):
 
 @app.route('/admin', methods=['GET','POST'])
 def admin():
+    conn = get_db()
+
     if request.method == 'POST':
         cantidad = request.form.get('cantidad')
         if not cantidad or not cantidad.isdigit() or int(cantidad) < 1:
             flash('Cantidad inválida.', 'danger')
+            conn.close()
             return redirect(url_for('admin'))
+
         cantidad = int(cantidad)
-        conn = get_db()
         nuevos_codigos = []
         for _ in range(cantidad):
             codigo = generar_codigo_qr_unico()
             conn.execute('INSERT INTO qr_codes (codigo) VALUES (?)', (codigo,))
-
-            # Generar QR con código impreso y guardarlo
-            img_qr = generar_qr_con_codigo_texto(codigo)
-            img_qr.save(os.path.join(QR_FOLDER, f'qr_{codigo}.png'))
-
+            # Generar la imagen con el texto debajo y guardarla en QR_FOLDER
+            try:
+                img_qr = generar_qr_con_codigo_texto(codigo)
+                img_qr.save(os.path.join(QR_FOLDER, f'qr_{codigo}.png'))
+            except Exception as e:
+                # si falla la generación de imagen, no abortamos el proceso de guardado en DB
+                print("Error generando imagen QR:", e)
             nuevos_codigos.append(codigo)
+
         conn.commit()
         conn.close()
-        flash(f'Se generaron {cantidad} códigos QR.', 'success')
-        return render_template('admin.html', nuevos_codigos=nuevos_codigos)
-    return render_template('admin.html')
+
+        # Guardamos los códigos generados en session (temporal) y redirigimos (PRG)
+        session['nuevos_codigos'] = nuevos_codigos
+        flash(f'Se generaron {len(nuevos_codigos)} códigos QR.', 'success')
+        return redirect(url_for('admin'))
+
+    # GET: mostramos la página admin con los códigos existentes + (si existen) los recien generados
+    # Sacamos los nuevos códigos de session (solo una vez)
+    nuevos = session.pop('nuevos_codigos', None)
+
+    # Consultar últimos 200 códigos generados (podés ajustar límite)
+    codigos = conn.execute('SELECT id, codigo, asignado FROM qr_codes ORDER BY id DESC LIMIT 200').fetchall()
+    conn.close()
+
+    return render_template('admin.html', nuevos_codigos=nuevos, codigos=codigos)
 
 if __name__ == '__main__':
     app.run(debug=True)

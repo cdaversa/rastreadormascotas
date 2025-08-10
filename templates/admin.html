@@ -4,29 +4,62 @@
 
 {% block content %}
 <h2>Panel Admin - Generar Códigos QR</h2>
-{% with messages = get_flashed_messages(with_categories=true) %}
-  {% if messages %}
-    {% for category, msg in messages %}
-      <div class="alert alert-{{ category }}">{{ msg }}</div>
-    {% endfor %}
-  {% endif %}
-{% endwith %}
 
-<form method="post">
-    <div class="mb-3">
-        <label>Cantidad de códigos a generar</label>
-        <input type="number" name="cantidad" min="1" class="form-control" required>
+<form method="post" class="mb-4">
+    <div class="row g-2 align-items-end">
+        <div class="col-auto">
+            <label class="form-label">Cantidad</label>
+            <input type="number" name="cantidad" min="1" class="form-control" value="1" required>
+        </div>
+        <div class="col-auto">
+            <button class="btn btn-primary">Generar</button>
+        </div>
     </div>
-    <button class="btn btn-primary" type="submit">Generar</button>
 </form>
 
 {% if nuevos_codigos %}
-  <hr>
-  <h4>Códigos generados:</h4>
-  <ul>
-    {% for c in nuevos_codigos %}
-      <li>{{ c }} - <a href="{{ url_for('descargar_qr', codigo=c) }}" target="_blank">Descargar QR</a></li>
-    {% endfor %}
-  </ul>
+  <div class="mb-4">
+    <h5>Códigos generados recientemente:</h5>
+    <div class="row g-3">
+      {% for c in nuevos_codigos %}
+        <div class="col-sm-6 col-md-4 col-lg-3">
+          <div class="card p-2">
+            <p class="mb-1"><strong>{{ c }}</strong></p>
+            <img src="{{ url_for('static', filename='qr_codes/qr_' + c + '.png') }}" class="img-fluid" alt="QR {{ c }}">
+            <div class="mt-2">
+              <a href="{{ url_for('descargar_qr', codigo=c) }}" class="btn btn-sm btn-outline-primary" target="_blank">Descargar</a>
+            </div>
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  </div>
 {% endif %}
+
+<hr>
+
+<h5>Últimos códigos en la base</h5>
+<table class="table table-sm table-striped">
+  <thead>
+    <tr><th>ID</th><th>Código</th><th>Asignado</th><th>QR</th></tr>
+  </thead>
+  <tbody>
+    {% for row in codigos %}
+      <tr>
+        <td>{{ row['id'] }}</td>
+        <td>{{ row['codigo'] }}</td>
+        <td>{% if row['asignado'] %}Sí{% else %}No{% endif %}</td>
+        <td>
+          {% set qrfile = 'qr_codes/qr_' + row['codigo'] + '.png' %}
+          {% if (qrfile|safe) %}
+            <img src="{{ url_for('static', filename=qrfile) }}" style="height:60px" alt="QR">
+            <a href="{{ url_for('descargar_qr', codigo=row['codigo']) }}" class="btn btn-sm btn-link" target="_blank">descargar</a>
+          {% else %}
+            <a href="{{ url_for('descargar_qr', codigo=row['codigo']) }}" class="btn btn-sm btn-outline-secondary">generar/descargar</a>
+          {% endif %}
+        </td>
+      </tr>
+    {% endfor %}
+  </tbody>
+</table>
 {% endblock %}
